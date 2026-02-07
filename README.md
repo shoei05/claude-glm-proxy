@@ -1,83 +1,69 @@
 # Claude GLM Proxy
 
-Claude Code のモデルスロットを GLM（Z.ai 経由）に差し替えるローカルプロキシサーバーです。
+Claude Code の Haiku スロットを Z.ai の GLM に差し替えるローカルプロキシサーバーです。
 
-## Special Thanks
+```
+Claude Code  ──→  localhost:8787（プロキシ）──→  Z.ai API（GLM-4.7）
+```
 
-このプロジェクトは [Zenn 記事](https://zenn.dev/azumag/articles/d9d0fbd8872342) を参考にしています。元記事ではプロキシサーバーの基本的なアイデアと実装方法が詳しく解説されています。このプロジェクトでは、そのアイデアをベースに独自の改善を加えて実運用しています。
+Claude Code の `ANTHROPIC_BASE_URL` と `ANTHROPIC_DEFAULT_HAIKU_MODEL` を組み合わせることで、Haiku スロットの呼び出しだけをこのプロキシ経由で GLM に転送できます。Opus / Sonnet は引き続き Anthropic API を直接利用します。
 
-## 独自調整点
+> [!NOTE]
+> [Zenn 記事（azumag 氏）](https://zenn.dev/azumag/articles/d9d0fbd8872342) のアイデアをベースに、Bun ランタイム・127.0.0.1 バインド・graceful shutdown・ヘルスチェックなどを加えた実装です。
 
-元記事からの主な変更点：
+## セットアップ
 
-- **Bun ランタイム使用**: Node.js より高速で軽量
-- **fetch API による簡素化**: Node.js 18+ の組み込み fetch API を使用
-- **graceful shutdown の実装**: SIGTERM/SIGINT で正常終了
-- **127.0.0.1 へのバインド**: セキュリティ強化（localhost のみでリッスン）
-- **エラーレスポンスの改善**: 内部情報の漏洩を防止
-- **Z.ai API 対応**: GLM-4.7 などのモデルを使用
-
-## インストール
+### 1. インストール
 
 ```bash
-# リポジトリをクローン
 git clone https://github.com/shoei05/claude-glm-proxy.git
 cd claude-glm-proxy
-
-# 依存関係をインストール
 bun install
 ```
 
-## 設定
-
-`.env.example` をコピーして `.env` を作成し、Z.ai API Key を設定してください。
+### 2. API Key の設定
 
 ```bash
 cp .env.example .env
 ```
 
-`.env` ファイルを編集：
+`.env` ファイルを編集して Z.ai API Key を設定します。
 
 ```bash
 # Z.ai API Key (https://z.ai から取得)
 ZAI_API_KEY=your_actual_zai_api_key_here
 ```
 
-## 使い方
+### 3. Claude Code の環境変数を設定
 
-### 1. プロキシサーバーを起動
-
-```bash
-bun run start
-```
-
-サーバーが `http://127.0.0.1:8787` で起動します。
-
-### 2. Claude Code の環境変数を設定
-
-`~/.zshrc` に以下を追加：
+`~/.zshrc` に以下を追加します。
 
 ```bash
-# Claude Code - Proxy to use GLM for all model slots
+# Claude Code - Haiku スロットのみ GLM を使用
 export ANTHROPIC_BASE_URL="http://localhost:8787"
 export ANTHROPIC_DEFAULT_HAIKU_MODEL="glm-4.7"
 ```
 
-設定を反映：
+設定を反映します。
 
 ```bash
 source ~/.zshrc
 ```
 
-これで Claude Code の Haiku スロットが GLM-4.7 を使用するようになります。
+### 4. プロキシサーバーを起動
 
-### 3. 動作確認
+```bash
+bun run start
+```
+
+`http://127.0.0.1:8787` で起動します。**起動したまま**にしてください（終了は `Ctrl+C`）。
+
+### 5. 動作確認
 
 ```bash
 curl http://localhost:8787/health
+# => {"status":"ok","service":"claude-glm-proxy"}
 ```
-
-`{"status":"ok","service":"claude-glm-proxy"}` が返ってくれば正常です。
 
 ## 常駐化（macOS）
 
@@ -103,20 +89,11 @@ launchctl print gui/$(id -u)/com.claude-glm-proxy
 launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.claude-glm-proxy.plist
 ```
 
-## モデルの選択方法
+## エージェントチームとの連携
 
-Claude Code 起動後に使用するモデルを切り替えるには、`/model` コマンドを使用します：
+Claude Code のエージェントチーム機能と組み合わせると、リーダー（自分）は Opus で品質重視、部下のエージェントは GLM でコスト削減、といった使い分けが可能です。
 
-- `/model` - モデル選択メニューを表示
-- `/model haiku` - Haiku スロット（GLM-4.7）を使用
-- `/model sonnet` - Sonnet スロットを使用
-- `/model opus` - Opus スロットを使用
-
-`~/.zshrc` で `ANTHROPIC_DEFAULT_HAIKU_MODEL="glm-4.7"` を設定している場合、デフォルトで GLM-4.7 が使用されます。
-
-## エージェントチームの使い方
-
-エージェントチーム機能の詳細は `~/.claude/CLAUDE.md` を参照してください。
+`~/.claude/CLAUDE.md` に「部下には haiku モデルを使うこと」と記載しておけば、エージェントチームが自動的に Haiku スロット（= GLM）を使って作業します。
 
 ## ライセンス
 
