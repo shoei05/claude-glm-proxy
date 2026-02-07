@@ -103,58 +103,20 @@ launchctl print gui/$(id -u)/com.claude-glm-proxy
 launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.claude-glm-proxy.plist
 ```
 
-## エージェントチームの建て方
+## モデルの選択方法
 
-Claude Code のエージェントチーム機能を使う場合：
+Claude Code 起動後に使用するモデルを切り替えるには、`/model` コマンドを使用します：
 
-```python
-# 1. チームを作成
-TeamCreate(
-    team_name="team-name",
-    description="チームの説明"
-)
+- `/model` - モデル選択メニューを表示
+- `/model haiku` - Haiku スロット（GLM-4.7）を使用
+- `/model sonnet` - Sonnet スロットを使用
+- `/model opus` - Opus スロットを使用
 
-# 2. エージェントを起動（haiku モデルを指定）
-Task(
-    subagent_type="general-purpose",
-    model="haiku",
-    name="agent-name",
-    team_name="team-name",
-    prompt="エージェントへの具体的な指示..."
-)
+`~/.zshrc` で `ANTHROPIC_DEFAULT_HAIKU_MODEL="glm-4.7"` を設定している場合、デフォルトで GLM-4.7 が使用されます。
 
-# 3. エージェントにメッセージを送信
-SendMessage(
-    recipient="agent-name",
-    type="message",
-    summary="要約",
-    content="詳細な指示..."
-)
+## エージェントチームの使い方
 
-# 4. 終了時はシャットダウン
-SendMessage(
-    recipient="agent-name",
-    type="shutdown_request",
-    content="タスク完了、セッション終了"
-)
-```
-
-## claude-glm コマンドについて
-
-以前は直接 Z.ai の API を使用する `claude-glm` エイリアスを使用していましたが、現在はローカルプロキシ方式に移行したため、このコマンドは実質使用していません。
-
-一応 `~/.zshrc` に残していますが、推奨される使い方はプロキシサーバー経由の方法です。
-
-## アーキテクチャ
-
-```
-Claude Code → localhost:8787 (プロキシ) → Z.ai API → GLM-4.7
-```
-
-プロキシサーバーは：
-- Anthropic API 互換のエンドポイントを提供（`/v1/messages`、`/v1/chat/completions`）
-- Z.ai API にリクエストを転送
-- GLM-4.7 などのモデルを使用可能
+エージェントチーム機能の詳細は `~/.claude/CLAUDE.md` を参照してください。
 
 ## ライセンス
 

@@ -11,15 +11,15 @@
         <string>proxy.mjs</string>
     </array>
     <key>WorkingDirectory</key>
-    <string>/Users/shoei05/dev/claude-glm-proxy</string>
+    <string>/Users/<USER>/dev/claude-glm-proxy</string>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
     <true/>
     <key>StandardOutPath</key>
-    <string>/Users/shoei05/dev/claude-glm-proxy/logs/proxy.log</string>
+    <string>/Users/<USER>/dev/claude-glm-proxy/logs/proxy.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/shoei05/dev/claude-glm-proxy/logs/proxy-error.log</string>
+    <string>/Users/<USER>/dev/claude-glm-proxy/logs/proxy-error.log</string>
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>
