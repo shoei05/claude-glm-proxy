@@ -20,6 +20,21 @@ export ANTHROPIC_DEFAULT_HAIKU_MODEL="glm-4.7"
 - Claude Code の全 API リクエストが `localhost:8787` に送られる
 - Haiku スロットに GLM-4.7 が使用される
 
+## Z.ai API Key の設定
+
+Z.ai (https://z.ai) から API Key を取得し、`.env` ファイルに設定してください：
+
+```bash
+# .env ファイル
+ZAI_API_KEY=your_actual_zai_api_key_here
+```
+
+`.env.example` をコピーして使用してください：
+
+```bash
+cp .env.example .env
+```
+
 ## プロキシサーバーの起動
 
 プロキシサーバーを起動するには：

@@ -1,7 +1,7 @@
 {
   "name": "claude-glm-proxy",
   "version": "1.0.0",
-  "description": "Proxy server for routing GLM model requests via OpenRouter API",
+  "description": "Proxy server for routing GLM model requests via Z.ai API",
   "type": "module",
   "main": "proxy.mjs",
   "scripts": {
@@ -17,7 +17,7 @@
   },
   "keywords": [
     "proxy",
-    "openrouter",
+    "zai",
     "glm",
     "claude"
   ],
