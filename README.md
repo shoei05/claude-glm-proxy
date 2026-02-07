@@ -10,6 +10,7 @@ Claude Code の `ANTHROPIC_BASE_URL` と `ANTHROPIC_DEFAULT_HAIKU_MODEL` を組�
 
 > [!NOTE]
 > [Zenn 記事（azumag 氏）](https://zenn.dev/azumag/articles/d9d0fbd8872342) のアイデアをベースに、以下の改善を加えた実装です。
+> macOS（Apple Silicon M4）で動作確認しています。
 
 ### 元記事からの改善点
 
