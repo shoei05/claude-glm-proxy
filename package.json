@@ -1,0 +1,25 @@
+{
+  "name": "claude-glm-proxy",
+  "version": "1.0.0",
+  "description": "Proxy server for routing GLM model requests via OpenRouter API",
+  "type": "module",
+  "main": "proxy.mjs",
+  "scripts": {
+    "start": "bun run proxy.mjs",
+    "dev": "bun run --watch proxy.mjs"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "bun": ">=1.0.0"
+  },
+  "keywords": [
+    "proxy",
+    "openrouter",
+    "glm",
+    "claude"
+  ],
+  "license": "MIT"
+}
