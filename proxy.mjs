@@ -1,13 +1,13 @@
 /**
  * Claude GLM Proxy Server
- * Routes GLM model requests to OpenRouter API
+ * Routes GLM model requests to Z.ai (GLM AI Studio) API
  */
 
 import 'dotenv/config';
 
 const PORT = 8787;
 const HOST = '127.0.0.1';
-const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const ZAI_API_BASE = 'https://api.z.ai/api/anthropic';
 
 // ANSI color codes for logging
 const colors = {
@@ -38,25 +38,6 @@ function errorResponse(status, message) {
 }
 
 /**
- * Validate request body
- */
-function validateRequestBody(body) {
-  if (!body || typeof body !== 'object') {
-    return { valid: false, error: 'Invalid request body' };
-  }
-
-  if (!body.model || typeof body.model !== 'string') {
-    return { valid: false, error: 'Missing or invalid "model" field' };
-  }
-
-  if (!Array.isArray(body.messages)) {
-    return { valid: false, error: 'Missing or invalid "messages" array' };
-  }
-
-  return { valid: true };
-}
-
-/**
  * Handle incoming requests
  */
 async function handleRequest(req, srv) {
@@ -79,55 +60,36 @@ async function handleRequest(req, srv) {
     return Response.json({ status: 'ok', service: 'claude-glm-proxy' });
   }
 
-  // Only accept POST to /v1/chat/completions or root
-  if (req.method !== 'POST' || (url.pathname !== '/v1/chat/completions' && url.pathname !== '/')) {
-    return Response.json(
-      errorResponse(404, 'Not found. Use POST /v1/chat/completions'),
-      { status: 404, headers: { 'Content-Type': 'application/json' } }
-    );
-  }
-
   try {
     const body = await req.json();
 
-    // Validate request
-    const validation = validateRequestBody(body);
-    if (!validation.valid) {
-      return Response.json(
-        errorResponse(400, validation.error),
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Check for API key in request
-    const apiKey = req.headers.get('authorization')?.replace('Bearer ', '')
-                   || req.headers.get('x-api-key');
-
-    if (!apiKey) {
-      return Response.json(
-        errorResponse(401, 'Missing API key. Provide via Authorization or x-api-key header.'),
-        { status: 401, headers: { 'Content-Type': 'application/json' } }
-      );
-    }
-
     // Log the request (without sensitive data)
-    log('INFO', `Proxying request for model: ${body.model}`);
+    log('INFO', `Proxying ${req.method} ${url.pathname} for model: ${body.model || 'unknown'}`);
 
-    // Forward to OpenRouter
+    // Forward to Z.ai API
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minute timeout
+    const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minute timeout
 
     try {
-      const response = await fetch(OPENROUTER_API_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
-          'HTTP-Referer': 'https://claude-glm-proxy.local',
-          'X-Title': 'Claude GLM Proxy',
-        },
+      // Build upstream URL
+      const upstreamUrl = new URL(url.pathname, ZAI_API_BASE);
+      if (url.search) {
+        upstreamUrl.search = url.search;
+      }
+
+      // Prepare headers - forward all except host/connection
+      const forwardHeaders = Object.fromEntries(
+        Object.entries(req.headers).filter(
+          ([k]) => k !== 'host' && k !== 'connection'
+        )
+      );
+
+      const response = await fetch(upstreamUrl.toString(), {
+        method: req.method,
+        headers: forwardHeaders,
         body: JSON.stringify(body),
         signal: controller.signal,
+        duplex: 'half',
       });
 
       clearTimeout(timeoutId);
@@ -144,7 +106,7 @@ async function handleRequest(req, srv) {
         );
       }
 
-      log('INFO', `Successfully proxied response for model: ${body.model}`);
+      log('INFO', `Successfully proxied response for model: ${body.model || 'unknown'}`);
 
       // Return successful response
       return Response.json(responseData, {
@@ -185,16 +147,23 @@ async function handleRequest(req, srv) {
  * Graceful shutdown handler
  */
 function setupShutdownHandlers(server) {
+  let isShuttingDown = false;
+
   const shutdown = async (signal) => {
+    if (isShuttingDown) return;
+    isShuttingDown = true;
     log('INFO', `Received ${signal}, shutting down gracefully...`);
 
     // Stop accepting new connections
-    server.close();
+    server.close(() => {
+      log('INFO', 'Server closed');
+      process.exit(0);
+    });
 
     // Give pending requests time to complete, then force exit
     setTimeout(() => {
       log('INFO', 'Forcing exit after grace period');
-      process.exit(0);
+      process.exit(1);
     }, 5000).unref();
   };
 
@@ -215,8 +184,10 @@ async function main() {
   setupShutdownHandlers(server);
 
   log('INFO', `Claude GLM Proxy running on http://${HOST}:${PORT}`);
+  log('INFO', 'Proxying to Z.ai (GLM AI Studio) API');
   log('INFO', 'Endpoints:');
-  log('INFO', `  POST /v1/chat/completions - Proxy chat requests to OpenRouter`);
+  log('INFO', `  POST /v1/messages - Anthropic Messages API`);
+  log('INFO', `  POST /v1/chat/completions - Chat Completions API`);
   log('INFO', `  GET  /health - Health check`);
 }
 

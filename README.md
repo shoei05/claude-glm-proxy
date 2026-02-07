@@ -1,6 +1,6 @@
 # Claude GLM Proxy
 
-Claude Code のモデルスロットを GLM（OpenRouter経由）に差し替えるローカルプロキシサーバーです。
+Claude Code のモデルスロットを GLM（Z.ai 経由）に差し替えるローカルプロキシサーバーです。
 
 ## Special Thanks
 
@@ -15,7 +15,7 @@ Claude Code のモデルスロットを GLM（OpenRouter経由）に差し替え
 - **graceful shutdown の実装**: SIGTERM/SIGINT で正常終了
 - **127.0.0.1 へのバインド**: セキュリティ強化（localhost のみでリッスン）
 - **エラーレスポンスの改善**: 内部情報の漏洩を防止
-- **OpenRouter API 対応**: GLM-4.7 などのモデルを使用
+- **Z.ai API 対応**: GLM-4.7 などのモデルを使用
 
 ## インストール
 
@@ -30,7 +30,7 @@ bun install
 
 ## 設定
 
-`.env.example` をコピーして `.env` を作成し、OpenRouter API Key を設定してください。
+`.env.example` をコピーして `.env` を作成し、Z.ai API Key を設定してください。
 
 ```bash
 cp .env.example .env
@@ -39,8 +39,8 @@ cp .env.example .env
 `.env` ファイルを編集：
 
 ```bash
-# OpenRouter API Key (https://openrouter.ai/keys から取得)
-OPENROUTER_API_KEY=your_actual_api_key_here
+# Z.ai API Key (https://z.ai から取得)
+ZAI_API_KEY=your_actual_zai_api_key_here
 ```
 
 ## 使い方
@@ -148,12 +148,12 @@ SendMessage(
 ## アーキテクチャ
 
 ```
-Claude Code → localhost:8787 (プロキシ) → OpenRouter API → GLM-4.7
+Claude Code → localhost:8787 (プロキシ) → Z.ai API → GLM-4.7
 ```
 
 プロキシサーバーは：
-- Anthropic API 互換のエンドポイントを提供（`/v1/chat/completions`）
-- OpenRouter API にリクエストを転送
+- Anthropic API 互換のエンドポイントを提供（`/v1/messages`、`/v1/chat/completions`）
+- Z.ai API にリクエストを転送
 - GLM-4.7 などのモデルを使用可能
 
 ## ライセンス
