@@ -9,7 +9,21 @@ Claude Code  ──→  localhost:8787（プロキシ）──→  Z.ai API（GL
 Claude Code の `ANTHROPIC_BASE_URL` と `ANTHROPIC_DEFAULT_HAIKU_MODEL` を組み合わせることで、Haiku スロットの呼び出しだけをこのプロキシ経由で GLM に転送できます。Opus / Sonnet は引き続き Anthropic API を直接利用します。
 
 > [!NOTE]
-> [Zenn 記事（azumag 氏）](https://zenn.dev/azumag/articles/d9d0fbd8872342) のアイデアをベースに、Bun ランタイム・127.0.0.1 バインド・graceful shutdown・ヘルスチェックなどを加えた実装です。
+> [Zenn 記事（azumag 氏）](https://zenn.dev/azumag/articles/d9d0fbd8872342) のアイデアをベースに、以下の改善を加えた実装です。
+
+### 元記事からの改善点
+
+- **Bun ランタイム**
+  Node.js の代わりに [Bun](https://bun.sh) を使用しています。起動が速く、メモリ消費も少ないため、バックグラウンドで常駐させても Mac への負荷が小さくなります。
+
+- **127.0.0.1 バインド**
+  サーバーが `127.0.0.1`（自分の Mac だけを指す特別なアドレス）でのみ待ち受けます。同じ Wi-Fi にいる他の端末からはアクセスできないため、API キーが外部に漏れる心配がありません。
+
+- **graceful shutdown（安全な終了処理）**
+  `Ctrl+C` やシステムの終了シグナルを受け取ったとき、処理中のリクエストを待ってからサーバーを停止します。突然切断されてエラーが出るのを防ぎます。macOS の launchd で常駐化する際にも、再起動時にデータが壊れません。
+
+- **ヘルスチェック**
+  `curl http://localhost:8787/health` を叩くだけで、プロキシが動いているか確認できます。「あれ、動いてないかも？」というときにすぐ状態がわかります。
 
 ## セットアップ
 
