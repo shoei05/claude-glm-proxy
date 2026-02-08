@@ -6,20 +6,19 @@
     <string>com.claude-glm-proxy</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/opt/homebrew/bin/bun</string>
-        <string>run</string>
+        <string>/opt/homebrew/bin/node</string>
         <string>proxy.mjs</string>
     </array>
     <key>WorkingDirectory</key>
-    <string>/Users/<USER>/dev/claude-glm-proxy</string>
+    <string>/Users/YOUR_USERNAME/dev/claude-glm-proxy</string>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
     <true/>
     <key>StandardOutPath</key>
-    <string>/Users/<USER>/dev/claude-glm-proxy/logs/proxy.log</string>
+    <string>/Users/YOUR_USERNAME/dev/claude-glm-proxy/logs/proxy.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/<USER>/dev/claude-glm-proxy/logs/proxy-error.log</string>
+    <string>/Users/YOUR_USERNAME/dev/claude-glm-proxy/logs/proxy-error.log</string>
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>

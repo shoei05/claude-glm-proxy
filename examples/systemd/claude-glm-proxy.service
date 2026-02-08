@@ -1,0 +1,15 @@
+[Unit]
+Description=Claude GLM Proxy (route glm-* to Z.ai, keep claude-* on Anthropic)
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/claude-glm-proxy
+ExecStart=/usr/bin/node %h/claude-glm-proxy/proxy.mjs
+Restart=always
+RestartSec=2
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=default.target
+

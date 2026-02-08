@@ -1,30 +1,52 @@
-# Claude GLM Proxy
+# Claude GLM Proxy (Claude Code Router)
 
-Claude Code の Haiku スロットを Z.ai の GLM に差し替えるローカルプロキシサーバーです。
+Claude Code の `ANTHROPIC_BASE_URL` をローカルプロキシに向け、**リクエスト本文の `model` で上流APIを振り分ける**プロキシです。
 
+- Haiku 相当スロット: `glm-*` に差し替えて **Z.ai (GLM)** へ
+- Opus / Sonnet: `claude-*` のまま **Anthropic 公式API** へ
+
+```text
+Claude Code
+  └─> http://127.0.0.1:8787 (this proxy)
+       ├─ model=glm-*        -> Z.ai (x-api-key)
+       └─ model=claude-*     -> Anthropic (authorization passthrough or x-api-key)
 ```
-Claude Code  ──→  localhost:8787（プロキシ）──→  Z.ai API（GLM-4.7）
-```
-
-Claude Code の `ANTHROPIC_BASE_URL` と `ANTHROPIC_DEFAULT_HAIKU_MODEL` を組み合わせることで、Haiku スロットの呼び出しだけをこのプロキシ経由で GLM に転送できます。Opus / Sonnet は引き続き Anthropic API を直接利用します。
 
 > [!NOTE]
-> [Zenn 記事（azumag 氏）](https://zenn.dev/azumag/articles/d9d0fbd8872342) のアイデアをベースに、以下の改善を加えた実装です。
-> macOS と Ubuntu（systemd）で動作確認しています。
+> アイデアは「Claude Code の `ANTHROPIC_BASE_URL` をプロキシに向け、モデル名でルーティングする」方式の調査記事/ノートに近いです。
+> このリポジトリは、そこに実運用で必要だった調整（認証ヘッダー衝突回避、圧縮レスポンス回避、常駐化テンプレ）まで含めています。
 
-### 元記事からの改善点
+## 何が嬉しいか（目的）
 
-- **Bun ランタイム**
-  Node.js の代わりに [Bun](https://bun.sh) を使用しています。起動が速く、メモリ消費も少ないため、バックグラウンドで常駐させても Mac への負荷が小さくなります。
+`ANTHROPIC_BASE_URL` をそのまま Z.ai に向けると、**Opus/Sonnet まで全部 Z.ai 側**になってしまい「Opusは公式、HaikuだけGLM」のような使い分けができません。
 
-- **127.0.0.1 バインド**
-  サーバーが `127.0.0.1`（自分の Mac だけを指す特別なアドレス）でのみ待ち受けます。同じ Wi-Fi にいる他の端末からはアクセスできないため、API キーが外部に漏れる心配がありません。
+このプロキシを挟むと、次の運用が可能になります。
 
-- **graceful shutdown（安全な終了処理）**
-  `Ctrl+C` やシステムの終了シグナルを受け取ったとき、処理中のリクエストを待ってからサーバーを停止します。突然切断されてエラーが出るのを防ぎます。macOS の launchd で常駐化する際にも、再起動時にデータが壊れません。
+- Opus/Sonnet: Anthropic 公式（品質重視）
+- Haiku 相当: GLM（コスト重視）
 
-- **ヘルスチェック**
-  `curl http://localhost:8787/health` を叩くだけで、プロキシが動いているか確認できます。「あれ、動いてないかも？」というときにすぐ状態がわかります。
+Agent Team と組み合わせると「親（自分）は Opus、子エージェントは GLM」みたいな構成も作れます。
+
+## 仕組み（重要ポイント）
+
+1. ルーティング
+
+- リクエスト本文の `model` を見て振り分けます。
+  - `model` が `glm` で始まる: Z.ai
+  - それ以外: Anthropic
+
+2. 認証ヘッダーの扱い
+
+- **Z.ai 宛て**:
+  - Claude Code が付ける `authorization: Bearer ...` は転送しません
+  - `x-api-key: ZAI_API_KEY` に差し替えます
+- **Anthropic 宛て**:
+  - `ANTHROPIC_API_KEY=sk-ant-...` が設定されていれば、それを `x-api-key` として固定で使い、`authorization` は捨てます
+  - 未設定なら `authorization` をそのまま中継します
+
+3. 圧縮レスポンスの回避
+
+上流が gzip/br を返すと、プロキシ越しでは Claude Code 側でエラーになることがあるため、`accept-encoding: identity` を明示して非圧縮を要求します。
 
 ## セットアップ
 
@@ -33,113 +55,110 @@ Claude Code の `ANTHROPIC_BASE_URL` と `ANTHROPIC_DEFAULT_HAIKU_MODEL` を組�
 ```bash
 git clone https://github.com/shoei05/claude-glm-proxy.git
 cd claude-glm-proxy
-bun install
+npm install
 ```
 
-### 2. API Key の設定
+### 2. `.env` を作成
 
 ```bash
 cp .env.example .env
 ```
 
-`.env` ファイルを編集して Z.ai API Key を設定します。
+`.env` を編集して必要な値を入れます。
 
-```bash
-# Z.ai API Key (https://z.ai から取得)
-ZAI_API_KEY=your_actual_zai_api_key_here
+```env
+ZAI_API_KEY=YOUR_ZAI_API_KEY
+ZAI_UPSTREAM_URL=https://api.z.ai/api/anthropic
+ANTHROPIC_UPSTREAM_URL=https://api.anthropic.com
+PORT=8787
+HOST=127.0.0.1
+
+# 任意: Ubuntu 等で Anthropic への authorization が通らない場合に設定
+# ANTHROPIC_API_KEY=sk-ant-....
 ```
 
-### 3. Claude Code の環境変数を設定
-
-`~/.zshrc` または `~/.bashrc` に以下を追加します。
+### 3. プロキシ起動
 
 ```bash
-# Claude Code - Haiku スロットのみ GLM を使用
+npm run start
+```
+
+### 4. Claude Code 側をプロキシへ向ける
+
+`~/.zshrc` または `~/.bashrc` に追記します。
+
+```bash
 export ANTHROPIC_BASE_URL="http://localhost:8787"
 export ANTHROPIC_DEFAULT_HAIKU_MODEL="glm-4.7"
 ```
 
-設定を反映します（bash の場合は `~/.bashrc`）。
+反映（zsh の例）:
 
 ```bash
 source ~/.zshrc
 ```
 
-bash の場合：
-
-```bash
-source ~/.bashrc
-```
-
-### 4. プロキシサーバーを起動
-
-```bash
-bun run start
-```
-
-`http://127.0.0.1:8787` で起動します。**起動したまま**にしてください（終了は `Ctrl+C`）。
-
 ### 5. 動作確認
+
+ヘルスチェック:
 
 ```bash
 curl http://localhost:8787/health
-# => {"status":"ok","service":"claude-glm-proxy"}
 ```
 
-## 常駐化（macOS）
+Claude Code の `/model` で切り替えつつ適当に投げ、プロキシログで確認します。
 
-launchd を使って自動起動・自動再起動を設定できます。
+```text
+[xxxx] POST /v1/messages?beta=true model=claude-opus-4-6 -> anthropic
+[xxxx] <- 200
+[yyyy] POST /v1/messages?beta=true model=glm-4.7 -> zai
+[yyyy] <- 200
+```
+
+## 常駐化
+
+### macOS (launchd)
+
+`com.claude-glm-proxy.plist` の `YOUR_USERNAME` を自分のユーザー名に置換して `~/Library/LaunchAgents/` に配置します。
 
 ```bash
-# plist ファイルをユーザー名に合わせて編集（<USER> 部分を置換）
-sed -i '' 's/<USER>/your_username/g' com.claude-glm-proxy.plist
-
-# plist を LaunchAgents にコピー
+sed -i '' 's/YOUR_USERNAME/your_username/g' com.claude-glm-proxy.plist
+mkdir -p logs
 cp com.claude-glm-proxy.plist ~/Library/LaunchAgents/
-
-# サービスを起動
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.claude-glm-proxy.plist
-
-# サービスの状態確認
-launchctl print gui/$(id -u)/com.claude-glm-proxy
 ```
 
-サービスを停止する場合：
+停止:
 
 ```bash
 launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.claude-glm-proxy.plist
 ```
 
-## 常駐化（Ubuntu / systemd）
+### Ubuntu (systemd --user)
 
-systemd のユーザーサービスとして常駐させます。
+`examples/systemd/claude-glm-proxy.service` を `~/.config/systemd/user/` に置いて有効化します。
 
 ```bash
 mkdir -p ~/.config/systemd/user
-cp claude-glm-proxy.service ~/.config/systemd/user/
-
-# <USER> を自分のユーザー名に置換
-sed -i 's/<USER>/your_username/g' ~/.config/systemd/user/claude-glm-proxy.service
-
+cp examples/systemd/claude-glm-proxy.service ~/.config/systemd/user/
 systemctl --user daemon-reload
-systemctl --user enable --now claude-glm-proxy.service
-
-# 状態確認
-systemctl --user status claude-glm-proxy.service
+systemctl --user enable --now claude-glm-proxy
 ```
 
-停止する場合：
+## トラブルシュート
 
-```bash
-systemctl --user disable --now claude-glm-proxy.service
-```
+### `401 Invalid bearer token` (Anthropic)
 
-## エージェントチームとの連携
+Anthropic 宛てに中継される `authorization: Bearer ...` が Anthropic 公式APIで無効な環境では、Opus/Sonnet が 401 になります。
 
-Claude Code のエージェントチーム機能と組み合わせると、リーダー（自分）は Opus で品質重視、部下のエージェントは GLM でコスト削減、といった使い分けが可能です。
+- 対策: `.env` に `ANTHROPIC_API_KEY=sk-ant-...` を入れてください
+  - この設定がある場合、プロキシは Anthropic 宛ての `authorization` を捨て、`x-api-key` を固定で付与します
 
-`~/.claude/CLAUDE.md` に「部下には haiku モデルを使うこと」と記載しておけば、エージェントチームが自動的に Haiku スロット（= GLM）を使って作業します。
+### `401 invalid x-api-key` (Z.ai)
+
+Z.ai 宛ての `ZAI_API_KEY` が未設定/誤りです。
 
 ## ライセンス
 
 MIT
+
