@@ -42,6 +42,8 @@ function errorResponse(status, message) {
  */
 async function handleRequest(req, srv) {
   const url = new URL(req.url, `http://${req.headers.host}`);
+  const zaiApiKey = process.env.ZAI_API_KEY;
+  const defaultHaikuModel = process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL;
 
   // CORS preflight
   if (req.method === 'OPTIONS') {
@@ -61,10 +63,37 @@ async function handleRequest(req, srv) {
   }
 
   try {
-    const body = await req.json();
+    const rawBodyBuffer = await req.arrayBuffer();
+    const rawBodyText = new TextDecoder().decode(rawBodyBuffer);
+    const sanitizedBody = rawBodyText.replace(/\u0000/g, '').trim();
+
+    if (!sanitizedBody && req.method !== 'GET' && req.method !== 'HEAD') {
+      return Response.json(
+        errorResponse(400, 'Empty request body'),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    let body = null;
+    if (sanitizedBody) {
+      try {
+        body = JSON.parse(sanitizedBody);
+      } catch {
+        log('WARN', `Invalid JSON body for ${req.method} ${url.pathname}, forwarding as-is`);
+      }
+    }
+
+    if (defaultHaikuModel && typeof body?.model === 'string') {
+      const isHaikuRequest = /^claude-3-haiku/i.test(body.model) || /^haiku/i.test(body.model);
+      if (isHaikuRequest) {
+        body.model = defaultHaikuModel;
+      }
+    }
+
+    const forwardBody = body ? JSON.stringify(body) : sanitizedBody;
 
     // Log the request (without sensitive data)
-    log('INFO', `Proxying ${req.method} ${url.pathname} for model: ${body.model || 'unknown'}`);
+    log('INFO', `Proxying ${req.method} ${url.pathname} for model: ${body?.model || 'unknown'}`);
 
     // Forward to Z.ai API
     const controller = new AbortController();
@@ -72,22 +101,30 @@ async function handleRequest(req, srv) {
 
     try {
       // Build upstream URL
-      const upstreamUrl = new URL(url.pathname, ZAI_API_BASE);
+      const upstreamUrl = new URL(url.pathname.replace(/^\//, ''), `${ZAI_API_BASE}/`);
       if (url.search) {
         upstreamUrl.search = url.search;
       }
 
       // Prepare headers - forward all except host/connection
-      const forwardHeaders = Object.fromEntries(
-        Object.entries(req.headers).filter(
-          ([k]) => k !== 'host' && k !== 'connection'
-        )
-      );
+      const forwardHeaders = new Headers();
+      for (const [key, value] of req.headers.entries()) {
+        const lowerKey = key.toLowerCase();
+        if (lowerKey === 'host' || lowerKey === 'connection' || lowerKey === 'content-length') {
+          continue;
+        }
+        forwardHeaders.set(key, value);
+      }
+      if (zaiApiKey) {
+        forwardHeaders.set('authorization', `Bearer ${zaiApiKey}`);
+        forwardHeaders.set('x-api-key', zaiApiKey);
+      }
+      forwardHeaders.set('content-type', 'application/json');
 
       const response = await fetch(upstreamUrl.toString(), {
         method: req.method,
         headers: forwardHeaders,
-        body: JSON.stringify(body),
+        body: forwardBody,
         signal: controller.signal,
         duplex: 'half',
       });
@@ -95,7 +132,34 @@ async function handleRequest(req, srv) {
       clearTimeout(timeoutId);
 
       // Get response data
-      const responseData = await response.json();
+      let responseData;
+      const responseContentType = response.headers.get('content-type') || 'application/json';
+      const responseText = await response.text();
+
+      try {
+        responseData = JSON.parse(responseText);
+      } catch {
+        responseData = undefined;
+      }
+
+      if (responseData === undefined) {
+        const preview = responseText.replace(/\s+/g, ' ').slice(0, 200) || '[empty response]';
+        log('WARN', `Upstream returned non-JSON response (${response.status}): ${preview}`);
+        if (!response.ok) {
+          return Response.json(
+            errorResponse(response.status, 'Upstream returned non-JSON response'),
+            { status: response.status, headers: { 'Content-Type': 'application/json' } }
+          );
+        }
+
+        return new Response(responseText ?? '', {
+          status: response.status,
+          headers: {
+            'Content-Type': responseContentType,
+            'Access-Control-Allow-Origin': '*',
+          },
+        });
+      }
 
       if (!response.ok) {
         log('WARN', `Upstream error: ${response.status}`);
@@ -128,13 +192,6 @@ async function handleRequest(req, srv) {
     }
 
   } catch (err) {
-    if (err instanceof SyntaxError) {
-      return Response.json(
-        errorResponse(400, 'Invalid JSON in request body'),
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
-      );
-    }
-
     log('ERROR', 'Request processing error:', err.message);
     return Response.json(
       errorResponse(500, 'Internal server error'),
@@ -155,10 +212,18 @@ function setupShutdownHandlers(server) {
     log('INFO', `Received ${signal}, shutting down gracefully...`);
 
     // Stop accepting new connections
-    server.close(() => {
-      log('INFO', 'Server closed');
+    if (typeof server.stop === 'function') {
+      server.stop();
+      log('INFO', 'Server stopped');
       process.exit(0);
-    });
+    }
+
+    if (typeof server.close === 'function') {
+      server.close(() => {
+        log('INFO', 'Server closed');
+        process.exit(0);
+      });
+    }
 
     // Give pending requests time to complete, then force exit
     setTimeout(() => {

@@ -10,7 +10,7 @@ Claude Code の `ANTHROPIC_BASE_URL` と `ANTHROPIC_DEFAULT_HAIKU_MODEL` を組�
 
 > [!NOTE]
 > [Zenn 記事（azumag 氏）](https://zenn.dev/azumag/articles/d9d0fbd8872342) のアイデアをベースに、以下の改善を加えた実装です。
-> macOS（Apple Silicon M4）で動作確認しています。
+> macOS と Ubuntu（systemd）で動作確認しています。
 
 ### 元記事からの改善点
 
@@ -51,7 +51,7 @@ ZAI_API_KEY=your_actual_zai_api_key_here
 
 ### 3. Claude Code の環境変数を設定
 
-`~/.zshrc` に以下を追加します。
+`~/.zshrc` または `~/.bashrc` に以下を追加します。
 
 ```bash
 # Claude Code - Haiku スロットのみ GLM を使用
@@ -59,10 +59,16 @@ export ANTHROPIC_BASE_URL="http://localhost:8787"
 export ANTHROPIC_DEFAULT_HAIKU_MODEL="glm-4.7"
 ```
 
-設定を反映します。
+設定を反映します（bash の場合は `~/.bashrc`）。
 
 ```bash
 source ~/.zshrc
+```
+
+bash の場合：
+
+```bash
+source ~/.bashrc
 ```
 
 ### 4. プロキシサーバーを起動
@@ -102,6 +108,30 @@ launchctl print gui/$(id -u)/com.claude-glm-proxy
 
 ```bash
 launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.claude-glm-proxy.plist
+```
+
+## 常駐化（Ubuntu / systemd）
+
+systemd のユーザーサービスとして常駐させます。
+
+```bash
+mkdir -p ~/.config/systemd/user
+cp claude-glm-proxy.service ~/.config/systemd/user/
+
+# <USER> を自分のユーザー名に置換
+sed -i 's/<USER>/your_username/g' ~/.config/systemd/user/claude-glm-proxy.service
+
+systemctl --user daemon-reload
+systemctl --user enable --now claude-glm-proxy.service
+
+# 状態確認
+systemctl --user status claude-glm-proxy.service
+```
+
+停止する場合：
+
+```bash
+systemctl --user disable --now claude-glm-proxy.service
 ```
 
 ## エージェントチームとの連携
